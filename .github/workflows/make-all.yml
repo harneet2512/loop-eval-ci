@@ -1,0 +1,47 @@
+name: make-all
+# Builds every missing sandbox one at a time, spaced out to stay under GitHub's content-creation limit.
+on:
+  workflow_dispatch:
+    inputs:
+      order:
+        description: "Space-separated ITEM:REP pairs"
+        required: true
+      plugin_ref:
+        required: true
+      spacing_s:
+        default: "120"
+permissions:
+  contents: read
+jobs:
+  make:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: harneet2512/loop-eval-grader
+          token: ${{ secrets.GH_PAT }}
+          path: grader
+          persist-credentials: false
+      - name: make sandboxes
+        env:
+          ORDER: ${{ inputs.order }}
+          PLUGIN_REF: ${{ inputs.plugin_ref }}
+          SPACING: ${{ inputs.spacing_s }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          for pair in $ORDER; do
+            it=${pair%:*}; rep=${pair#*:}
+            for arm in A B; do
+              r="loop-eval-sbx-$(echo $it|tr A-Z a-z)-$(echo $arm|tr A-Z a-z)-$rep"
+              tries=0
+              until gh repo view "harneet2512/$r" --json name >/dev/null 2>&1; do
+                tries=$((tries+1)); [ $tries -gt 6 ] && { echo "GIVEUP $r"; break; }
+                ( export ITEM=$it ARM=$arm REP=$rep; cd "$GITHUB_WORKSPACE" && bash grader/ci/make-sandbox.sh >/dev/null 2>&1 ) \
+                  && echo "OK $r" || { echo "RETRY $r"; sleep 600; continue; }
+                sleep "$SPACING"
+              done
+            done
+            echo "PAIR_READY $it $rep"
+          done
