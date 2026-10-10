@@ -1,0 +1,81 @@
+name: validate-bugs
+on:
+  workflow_dispatch:
+    inputs:
+      items:
+        description: "Comma separated item ids"
+        default: "B1,B2,B3,B4"
+        required: true
+permissions:
+  contents: read
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.m.outputs.matrix }}
+    steps:
+      - id: m
+        env:
+          ITEMS: ${{ inputs.items }}
+        run: |
+          echo "matrix=$(python3 -c 'import json,os,re;print(json.dumps([i.strip() for i in os.environ["ITEMS"].split(",") if re.fullmatch(r"[A-Za-z0-9-]+", i.strip())]))')" >> "$GITHUB_OUTPUT"
+  validate:
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        item: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: harneet2512/loop-eval-grader
+          token: ${{ secrets.GH_PAT }}
+          path: grader
+          persist-credentials: false
+      - id: tc
+        env:
+          ITEM: ${{ matrix.item }}
+        run: bash grader/ci/toolchain.sh "$ITEM"
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: ${{ steps.tc.outputs.node }}
+      - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda
+        if: steps.tc.outputs.pnpm == 'true'
+        with:
+          version: 10.12.1
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@e92bafb6253dcd438e0484186d7669ea7a8ca1cc
+        if: steps.tc.outputs.uv == 'true'
+      - name: validate
+        env:
+          ITEM: ${{ matrix.item }}
+          RUN_ID: ${{ github.run_id }}
+        run: bash grader/ci/validate.sh "$ITEM"
+      - name: publish results
+        if: always()
+        env:
+          ITEM: ${{ matrix.item }}
+          RUN_ID: ${{ github.run_id }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: bash grader/ci/publish.sh validate "$ITEM"
+  report:
+    needs: validate
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: harneet2512/loop-eval-grader
+          token: ${{ secrets.GH_PAT }}
+          path: grader
+          persist-credentials: false
+      - name: report
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: bash grader/ci/report.sh

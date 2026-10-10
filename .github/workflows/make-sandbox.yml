@@ -1,0 +1,47 @@
+name: make-sandbox
+on:
+  workflow_dispatch:
+    inputs:
+      item:
+        description: "Item id"
+        required: true
+      arm:
+        description: "A or B"
+        required: true
+        type: choice
+        options: ["A", "B"]
+      rep:
+        description: "Replicate number (0 = throwaway)"
+        required: true
+      plugin_ref:
+        description: "Plugin ref for arm B"
+        required: false
+        default: ""
+permissions:
+  contents: read
+jobs:
+  make:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: harneet2512/loop-eval-grader
+          token: ${{ secrets.GH_PAT }}
+          path: grader
+          persist-credentials: false
+      - name: make sandbox
+        env:
+          ITEM: ${{ inputs.item }}
+          ARM: ${{ inputs.arm }}
+          REP: ${{ inputs.rep }}
+          PLUGIN_REF: ${{ inputs.plugin_ref }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: bash grader/ci/make-sandbox.sh
+      - name: publish log
+        if: always()
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+          RUN_ID: ${{ github.run_id }}
+          KEY: ${{ inputs.item }}-${{ inputs.arm }}-${{ inputs.rep }}
+        run: bash grader/ci/publish.sh sandbox "$KEY"

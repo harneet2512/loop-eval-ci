@@ -1,0 +1,25 @@
+name: gen-lock
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  gen:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: harneet2512/loop-eval-grader
+          token: ${{ secrets.GH_PAT }}
+          path: grader
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "22"
+      - name: generate
+        run: bash grader/ci/gen-lock.sh
+      - name: publish
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+          RUN_ID: ${{ github.run_id }}
+        run: bash grader/ci/publish.sh genlock B1
