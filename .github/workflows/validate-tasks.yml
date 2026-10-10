@@ -1,0 +1,70 @@
+name: validate-tasks
+on:
+  workflow_dispatch:
+    inputs:
+      items:
+        description: "Comma separated task ids"
+        default: "T1,T2,T3,T4"
+        required: true
+permissions:
+  contents: read
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.m.outputs.matrix }}
+    steps:
+      - id: m
+        env:
+          ITEMS: ${{ inputs.items }}
+        run: |
+          echo "matrix=$(python3 -c 'import json,os,re;print(json.dumps([i.strip() for i in os.environ["ITEMS"].split(",") if re.fullmatch(r"T[0-9]+", i.strip())]))')" >> "$GITHUB_OUTPUT"
+  validate:
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        item: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: harneet2512/loop-eval-grader
+          token: ${{ secrets.GH_PAT }}
+          path: grader
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "22"
+      - name: fetch app
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: bash grader/ci/fetch-app.sh
+      - name: validate
+        env:
+          ITEM: ${{ matrix.item }}
+        run: bash grader/ci/validate-task.sh "$ITEM"
+      - name: publish results
+        if: always()
+        env:
+          ITEM: ${{ matrix.item }}
+          RUN_ID: ${{ github.run_id }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: bash grader/ci/publish.sh validate-task "$ITEM"
+  report:
+    needs: validate
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: harneet2512/loop-eval-grader
+          token: ${{ secrets.GH_PAT }}
+          path: grader
+          persist-credentials: false
+      - name: report
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: bash grader/ci/report-tasks.sh
