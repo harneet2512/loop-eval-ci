@@ -1,6 +1,6 @@
 name: make-matrix
 # One fresh runner per sandbox (make-sandbox.sh is not safe to run twice on one runner).
-# GitHub rate-limits repo creation ("created too many repositories, too quickly"): retry up to 10 times, 10 min apart.
+# One attempt only: GitHub rate-limits repo creation, so a failure stops here and is paced by the operator, never retried in a loop.
 on:
   workflow_dispatch:
     inputs:
@@ -14,7 +14,7 @@ permissions:
 jobs:
   make:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       max-parallel: 1
@@ -37,5 +37,4 @@ jobs:
           IFS=: read -r ITEM ARM REP <<< "$KEY"; export ITEM ARM REP
           r="loop-eval-sbx-$(echo $ITEM|tr A-Z a-z)-$(echo $ARM|tr A-Z a-z)-$REP"
           gh repo view "harneet2512/$r" --json name >/dev/null 2>&1 && { echo "EXISTS $r"; exit 0; }
-          for i in 1 2 3 4 5 6 7 8 9 10; do bash grader/ci/make-sandbox.sh && { echo "OK $r"; exit 0; }; echo "RETRY $r"; sleep 600; gh repo view "harneet2512/$r" --json name >/dev/null 2>&1 && exit 0; done
-          exit 1
+          bash grader/ci/make-sandbox.sh && echo "OK $r"
