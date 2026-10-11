@@ -16,7 +16,7 @@ jobs:
     timeout-minutes: 30
     strategy:
       fail-fast: false
-      max-parallel: 2
+      max-parallel: 1
       matrix:
         key: ${{ fromJSON(inputs.list) }}
     steps:
@@ -36,5 +36,5 @@ jobs:
           IFS=: read -r ITEM ARM REP <<< "$KEY"; export ITEM ARM REP
           r="loop-eval-sbx-$(echo $ITEM|tr A-Z a-z)-$(echo $ARM|tr A-Z a-z)-$REP"
           gh repo view "harneet2512/$r" --json name >/dev/null 2>&1 && { echo "EXISTS $r"; exit 0; }
-          for i in 1 2 3; do bash grader/ci/make-sandbox.sh && { echo "OK $r"; exit 0; }; echo "RETRY $r"; sleep 90; gh repo view "harneet2512/$r" --json name >/dev/null 2>&1 && exit 0; done
+          for i in 1 2 3; do bash grader/ci/make-sandbox.sh && { echo "OK $r"; exit 0; }; echo "RETRY $r"; sleep 300; gh repo view "harneet2512/$r" --json name >/dev/null 2>&1 && exit 0; done
           exit 1
