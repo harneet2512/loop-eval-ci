@@ -1,0 +1,40 @@
+name: make-matrix
+# One fresh runner per sandbox (make-sandbox.sh is not safe to run twice on one runner).
+on:
+  workflow_dispatch:
+    inputs:
+      list:
+        description: 'JSON array of "ITEM:ARM:REP", e.g. ["B4:B:1","T1:A:1"]'
+        required: true
+      plugin_ref:
+        required: true
+permissions:
+  contents: read
+jobs:
+  make:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        key: ${{ fromJSON(inputs.list) }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: harneet2512/loop-eval-grader
+          token: ${{ secrets.GH_PAT }}
+          path: grader
+          persist-credentials: false
+      - name: make sandbox
+        env:
+          KEY: ${{ matrix.key }}
+          PLUGIN_REF: ${{ inputs.plugin_ref }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          IFS=: read -r ITEM ARM REP <<< "$KEY"; export ITEM ARM REP
+          r="loop-eval-sbx-$(echo $ITEM|tr A-Z a-z)-$(echo $ARM|tr A-Z a-z)-$REP"
+          gh repo view "harneet2512/$r" --json name >/dev/null 2>&1 && { echo "EXISTS $r"; exit 0; }
+          for i in 1 2 3; do bash grader/ci/make-sandbox.sh && { echo "OK $r"; exit 0; }; echo "RETRY $r"; sleep 90; gh repo view "harneet2512/$r" --json name >/dev/null 2>&1 && exit 0; done
+          exit 1
